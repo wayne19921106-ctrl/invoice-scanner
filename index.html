@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#c8202f">
+<title>發票掃描對獎</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<style>
+:root{
+  --bg:#eef0ee; --paper:#fbfbf8; --ink:#1d2321; --muted:#68716d; --line:#d6dad6;
+  --red:#c8202f; --red-soft:#fbe4e6; --win:#0f7a4a; --win-soft:#dcf2e6;
+  --sans:"Noto Sans TC",system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#121514; --paper:#1b1f1e; --ink:#e9ece9; --muted:#9aa39f; --line:#2f3533;
+  --red:#ff5a66; --red-soft:#3a1a1e; --win:#4fd391; --win-soft:#13301f; color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:calc(16px + env(safe-area-inset-top,0px)) calc(32px + env(safe-area-inset-bottom,0px))}
+[hidden]{display:none!important}
+.wrap{max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+header h1{font-size:24px;font-weight:900;margin:0;letter-spacing:.02em}
+header p{margin:0;color:var(--muted);font-size:13px}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.lbl{font-size:12px;color:var(--muted);letter-spacing:.08em;font-weight:500}
+select,input[type=text]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:100%}
+input[type=text]{font-family:var(--mono);font-size:22px;letter-spacing:.15em;text-align:center}
+:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;background:var(--red);color:#fff;border:0;border-radius:10px;padding:14px;font:700 16px var(--sans);cursor:pointer;width:100%}
+.btn.sec{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:500;font-size:14px;padding:10px}
+.cam{position:relative;border-radius:10px;overflow:hidden;background:#000;aspect-ratio:4/3;max-width:100%}
+.cam video{width:100%;height:100%;object-fit:cover;display:block}
+.frame{position:absolute;inset:18%;border:3px solid rgba(255,255,255,.9);border-radius:12px;box-shadow:0 0 0 999px rgba(0,0,0,.35);transition:border-color .2s}
+.cam.hit .frame{border-color:#4fd391}
+.cam.miss .frame{border-color:#ff5a66}
+.camtip{position:absolute;left:0;right:0;bottom:8px;text-align:center;color:#fff;font-size:13px;text-shadow:0 1px 3px #000}
+.nums{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-items:baseline;font-size:13px}
+.nums b{font-family:var(--mono);font-size:16px;letter-spacing:.08em;font-variant-numeric:tabular-nums}
+.nums b u{text-decoration:none;color:var(--red)}
+.nums span{color:var(--muted)}
+#result{border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:2px;border:1px solid var(--line);background:var(--paper)}
+#result.win{background:var(--win-soft);border-color:var(--win)}
+#result.warn{background:var(--red-soft);border-color:var(--red)}
+#result .big{font-size:22px;font-weight:900}
+#result.win .big{color:var(--win)}
+#result .no{font-family:var(--mono);font-size:18px;letter-spacing:.1em}
+#result .sub{font-size:13px;color:var(--muted)}
+.hist{list-style:none;margin:0;padding:0}
+.hist li{display:grid;grid-template-columns:1fr auto;gap:8px;padding:7px 0;border-top:1px dashed var(--line);font-size:13px}
+.hist li:first-child{border-top:0}
+.hist .n{font-family:var(--mono);letter-spacing:.06em}
+.hist .w{color:var(--win);font-weight:700}
+.hist .l{color:var(--muted)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ghost{background:none;border:0;color:var(--muted);font:inherit;font-size:13px;cursor:pointer;text-decoration:underline}
+footer{font-size:12px;color:var(--muted);text-align:center}
+footer a{color:inherit}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>發票掃描對獎</h1>
+    <p>鏡頭對準電子發票左邊的 QR Code，自動連續對獎</p>
+  </header>
+
+  <section class="card">
+    <div class="cam" id="cam" hidden>
+      <video id="video" playsinline muted></video>
+      <div class="frame"></div>
+      <div class="camtip" id="camtip">把左邊 QR Code 放進框內</div>
+    </div>
+    <button class="btn" id="camBtn" type="button">開啟鏡頭掃描</button>
+    <input id="file" type="file" accept="image/*" capture="environment" hidden>
+    <button class="btn sec" id="photoBtn" type="button">鏡頭無法使用？改用拍照</button>
+    <label class="lbl" for="manual">手動輸入（末 3 碼快速對／完整 8 碼）</label>
+    <input id="manual" type="text" inputmode="numeric" maxlength="10" placeholder="例如 835" autocomplete="off">
+  </section>
+
+  <section id="result" aria-live="polite">
+    <div class="big">準備好了</div>
+    <div class="sub">掃描結果會顯示在這裡</div>
+  </section>
+
+  <section class="card">
+    <label class="lbl" for="period">對獎期別（掃描時依發票日期自動切換）</label>
+    <select id="period"></select>
+    <div class="nums" id="nums"></div>
+  </section>
+
+  <section class="card">
+    <div class="row"><span class="lbl">對獎紀錄</span><button class="ghost" id="clear" type="button">清除</button></div>
+    <div class="row" style="font-size:13px"><span id="sumCount">0 張</span><span id="sumAmt" style="font-weight:700">中獎 $0</span></div>
+    <ul class="hist" id="hist"></ul>
+  </section>
+
+  <footer>號碼來源：<a href="https://www.etax.nat.gov.tw/etw-main/ETW183W1/" target="_blank" rel="noopener">財政部稅務入口網</a>　實際領獎以財政部公告為準</footer>
+</div>
+
+<script>
+/* ===== 每期開獎後在這裡新增一筆即可（key = 民國年 + 單數月） ===== */
+const DRAWS = {
+  "11507": {label:"115年 7–8 月", deadline:"115/10/06 – 116/01/05", special:"89996565", grand:"91098182", first:["54348835","44991397","06595111"]},
+  "11505": {label:"115年 5–6 月", deadline:"115/08/06 – 115/11/05", special:"38548029", grand:"10138845", first:["24121106","28589937","83663333"]}
+};
+const TIERS = [[8,"頭獎",200000],[7,"二獎",40000],[6,"三獎",10000],[5,"四獎",4000],[4,"五獎",1000],[3,"六獎",200]];
+const INV = /([A-Z]{2})(\d{8})(\d{3})(\d{2})(\d{2})/;   // 電子發票左側 QR：字軌+號碼+民國日期
+const $ = id => document.getElementById(id);
+const fmt = n => "$" + n.toLocaleString("zh-TW");
+
+const sel = $("period");
+for (const [k,v] of Object.entries(DRAWS)) sel.add(new Option(`${v.label}（領獎 ${v.deadline}）`, k));
+sel.onchange = renderNums;
+function renderNums(){
+  const d = DRAWS[sel.value], hl = s => s.slice(0,5)+"<u>"+s.slice(5)+"</u>";
+  $("nums").innerHTML = `<span>特別獎 1000萬</span><b>${d.special}</b><span>特獎 200萬</span><b>${d.grand}</b><span>頭獎 20萬</span><b>${d.first.map(hl).join("<br>")}</b>`;
+}
+renderNums();
+
+function judge(no, d){
+  if (no === d.special) return {name:"特別獎", amt:10000000};
+  if (no === d.grand) return {name:"特獎", amt:2000000};
+  for (const [len,name,amt] of TIERS) if (d.first.some(f => f.slice(-len) === no.slice(-len))) return {name, amt};
+  return null;
+}
+
+function show(cls, big, no, sub){
+  const r = $("result"); r.className = cls;
+  r.innerHTML = `<div class="big"></div>${no?'<div class="no"></div>':''}<div class="sub"></div>`;
+  r.querySelector(".big").textContent = big;
+  if (no) r.querySelector(".no").textContent = no;
+  r.querySelector(".sub").textContent = sub || "";
+}
+
+let history = [];
+try { history = JSON.parse(localStorage.getItem("inv-hist") || "[]"); } catch(e) {}
+const save = () => { try { localStorage.setItem("inv-hist", JSON.stringify(history)); } catch(e) {} };
+function renderHist(){
+  const ul = $("hist"); ul.innerHTML = "";
+  for (const h of history) {
+    const li = document.createElement("li");
+    li.innerHTML = `<span><span class="n"></span> <span class="l">· ${DRAWS[h.p]?.label||h.p}</span></span><span class="${h.amt?'w':'l'}"></span>`;
+    li.querySelector(".n").textContent = h.no;
+    li.lastChild.textContent = h.amt ? `${h.name} ${fmt(h.amt)}` : "未中";
+    ul.appendChild(li);
+  }
+  $("sumCount").textContent = `${history.length} 張`;
+  $("sumAmt").textContent = `中獎 ${fmt(history.reduce((a,h)=>a+h.amt,0))}`;
+}
+renderHist();
+$("clear").onclick = () => { history = []; save(); renderHist(); };
+
+/* 回傳 true=中獎, false=未中, null=無效 */
+function check(raw){
+  const s = raw.replace(/\s/g,"").toUpperCase(), d = DRAWS[sel.value];
+  const digits = s.replace(/^[A-Z]{2}/,"");
+  if (/^\d{3}$/.test(digits)) {
+    const hit = [...d.first, d.special, d.grand].some(f => f.endsWith(digits));
+    hit ? show("win","末 3 碼有對中！",digits,"至少六獎 $200，請輸入完整 8 碼確認") : show("","沒中",digits,`${d.label}末 3 碼都不符`);
+    return hit;
+  }
+  if (!/^\d{8}$/.test(digits)) { show("warn","號碼格式不對",s,"請輸入末 3 碼或完整 8 碼"); return null; }
+  const r = judge(digits, d), label = (s.match(/^[A-Z]{2}/)||[""])[0] + digits;
+  r ? show("win",`中 ${r.name}！${fmt(r.amt)}`,label,`${d.label}　領獎期間 ${d.deadline}`) : show("","沒中，下一張",label,d.label);
+  if (!history.some(h => h.no === label && h.p === sel.value)) {
+    history.unshift({no:label, p:sel.value, name:r?r.name:"", amt:r?r.amt:0}); save(); renderHist();
+  }
+  return !!r;
+}
+
+/* 從 QR 內容判斷期別並對獎 */
+function handleQR(text){
+  const m = text.match(INV); if (!m) return null;
+  const [, track, num, y, mo] = m, mm = +mo, pk = y + String(mm % 2 ? mm : mm - 1).padStart(2,"0");
+  if (!DRAWS[pk]) { show("warn","這期尚未開獎或不在清單內",track+num,`發票日期 ${y}/${mo}`); return false; }
+  sel.value = pk; renderNums();
+  return check(track + num);
+}
+
+$("manual").addEventListener("input", e => {
+  const n = e.target.value.replace(/[^0-9A-Za-z]/g,"").replace(/^[A-Za-z]{2}/,"");
+  if (n.length === 3 || n.length === 8) check(e.target.value);
+});
+
+/* ===== 即時鏡頭 ===== */
+let stream = null, detector = null, busy = false, last = {text:"", t:0};
+const video = $("video"), canvas = document.createElement("canvas");
+const ctx = canvas.getContext("2d", {willReadFrequently:true});
+
+async function initDetector(){
+  if (!("BarcodeDetector" in window)) return null;
+  try { const f = await BarcodeDetector.getSupportedFormats(); return f.includes("qr_code") ? new BarcodeDetector({formats:["qr_code"]}) : null; }
+  catch(e){ return null; }
+}
+
+async function startCam(){
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}, width:{ideal:1280}, height:{ideal:720}}, audio:false});
+  } catch(e) {
+    show("warn","無法開啟鏡頭", "", e.name === "NotAllowedError" ? "請在瀏覽器設定允許相機權限後重試" : "此裝置或瀏覽器不支援，請改用拍照或手動輸入");
+    return;
+  }
+  video.srcObject = stream; await video.play();
+  detector = await initDetector();
+  $("cam").hidden = false; $("camBtn").textContent = "關閉鏡頭";
+  try { await navigator.wakeLock?.request("screen"); } catch(e) {}
+  loop();
+}
+function stopCam(){
+  stream?.getTracks().forEach(t => t.stop()); stream = null;
+  $("cam").hidden = true; $("camBtn").textContent = "開啟鏡頭掃描";
+}
+$("camBtn").onclick = () => stream ? stopCam() : startCam();
+document.addEventListener("visibilitychange", () => { if (document.hidden && stream) stopCam(); });
+
+async function decodeFrame(){
+  const vw = video.videoWidth, vh = video.videoHeight; if (!vw) return [];
+  if (detector) {
+    try { return (await detector.detect(video)).map(c => c.rawValue); } catch(e) { detector = null; }
+  }
+  // jsQR：只取中央取景框區域並縮小，降低運算量
+  const sx = vw*0.12|0, sy = vh*0.12|0, sw = vw*0.76|0, sh = vh*0.76|0, k = Math.min(1, 640/sw);
+  canvas.width = sw*k|0; canvas.height = sh*k|0;
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  const r = jsQR(ctx.getImageData(0,0,canvas.width,canvas.height).data, canvas.width, canvas.height, {inversionAttempts:"dontInvert"});
+  return r ? [r.data] : [];
+}
+
+async function loop(){
+  if (!stream) return;
+  if (!busy) {
+    busy = true;
+    try {
+      const texts = await decodeFrame();
+      const t = texts.find(x => INV.test(x));
+      const now = Date.now();
+      if (t) {
+        const key = t.match(INV).slice(1,3).join("");
+        if (key !== last.text || now - last.t > 3000) {
+          last = {text:key, t:now};
+          const win = handleQR(t);
+          const cam = $("cam"); cam.classList.remove("hit","miss"); cam.classList.add(win ? "hit" : "miss");
+          $("camtip").textContent = win ? "中獎了！" : "沒中，換下一張";
+          navigator.vibrate?.(win ? [80,60,80,60,200] : 40);
+          setTimeout(() => { cam.classList.remove("hit","miss"); $("camtip").textContent = "把左邊 QR Code 放進框內"; }, 1200);
+        }
+      } else if (texts.some(x => x.startsWith("**"))) {
+        $("camtip").textContent = "這是右邊的 QR Code，請對準左邊那個";
+      }
+    } finally { busy = false; }
+  }
+  setTimeout(() => requestAnimationFrame(loop), detector ? 60 : 150);
+}
+
+/* ===== 拍照備援 ===== */
+$("photoBtn").onclick = () => $("file").click();
+$("file").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  show("","辨識中…","","");
+  try {
+    const img = await createImageBitmap(f); let found = null;
+    for (const [sx, sw] of [[0,img.width],[0,img.width*0.6|0],[img.width*0.4|0,img.width*0.6|0]]) {
+      const k = Math.min(1, 1400/Math.max(sw,img.height));
+      canvas.width = sw*k|0; canvas.height = img.height*k|0;
+      ctx.drawImage(img, sx, 0, sw, img.height, 0, 0, canvas.width, canvas.height);
+      const r = jsQR(ctx.getImageData(0,0,canvas.width,canvas.height).data, canvas.width, canvas.height, {inversionAttempts:"attemptBoth"});
+      if (r && INV.test(r.data)) { found = r.data; break; }
+    }
+    found ? handleQR(found) : show("warn","讀不到左邊 QR Code","","請靠近、避免反光再拍一次，或改用手動輸入");
+  } catch(err) { show("warn","圖片讀取失敗","","請換一張照片再試"); }
+};
+</script>
+</body>
+</html>
